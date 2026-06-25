@@ -65,6 +65,11 @@ function Checkin() {
       setBusy(false);
     }
   }
+  function addTask(t: Suggested) {
+    actions.addTask(t.title, t.priority, t.estimateMinutes);
+    setSuggested((s) => s.filter((x) => x !== t));
+    toast.success("Added to tasks");
+  }
   function addAll() {
     suggested.forEach((t) => actions.addTask(t.title, t.priority, t.estimateMinutes));
     setSuggested([]);
