@@ -1,11 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { useAuth } from "@/lib/use-auth";
-import { supabase } from "@/integrations/supabase/client";
 import { Trophy, Crown, Medal, Flame, Lock } from "lucide-react";
+import { useDemo } from "@/lib/demo-store";
 
-type Row = { id: string; display_name: string | null; avatar_url: string | null; points: number; streak: number };
+type Row = { id: string; display_name: string; points: number; streak: number };
 
 const TIERS = [
   { pts: 50, name: "Spark", icon: "✨" },
@@ -14,27 +12,27 @@ const TIERS = [
   { pts: 800, name: "Unstoppable", icon: "🏆" },
 ];
 
+const BOARD: Row[] = [
+  { id: "u1", display_name: "Maya Chen", points: 940, streak: 21 },
+  { id: "u2", display_name: "Daniel Park", points: 812, streak: 14 },
+  { id: "u3", display_name: "Sofia Reyes", points: 670, streak: 9 },
+  { id: "u4", display_name: "Liam O'Connor", points: 510, streak: 12 },
+  { id: "me", display_name: "You", points: 0, streak: 0 },
+  { id: "u5", display_name: "Aisha Khan", points: 290, streak: 6 },
+  { id: "u6", display_name: "Noah Bennett", points: 240, streak: 4 },
+  { id: "u7", display_name: "Emma Schultz", points: 180, streak: 3 },
+];
+
 export const Route = createFileRoute("/rewards")({
   head: () => ({ meta: [{ title: "Rewards — Last Minute Life Saver" }] }),
   component: () => <AppShell><Rewards /></AppShell>,
 });
 
 function Rewards() {
-  const { user } = useAuth();
-  const [me, setMe] = useState<Row | null>(null);
-  const [board, setBoard] = useState<Row[]>([]);
+  const points = useDemo((s) => s.points);
+  const streak = useDemo((s) => s.streak);
 
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data: meRow } = await supabase.from("profiles").select("id,display_name,avatar_url,points,streak").eq("id", user.id).maybeSingle();
-      setMe(meRow as Row);
-      const { data: top } = await supabase.from("profiles").select("id,display_name,avatar_url,points,streak").order("points", { ascending: false }).limit(20);
-      setBoard((top ?? []) as Row[]);
-    })();
-  }, [user]);
-
-  const points = me?.points ?? 0;
+  const board = [...BOARD.map((r) => r.id === "me" ? { ...r, points, streak } : r)].sort((a, b) => b.points - a.points);
   const nextTier = TIERS.find((t) => t.pts > points) ?? TIERS[TIERS.length - 1];
   const progress = Math.min(100, Math.round((points / nextTier.pts) * 100));
 
@@ -44,13 +42,13 @@ function Rewards() {
 
       <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="glass-card p-6">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">Your points</div>
               <div className="mt-1 text-4xl font-bold gradient-text">{points}</div>
             </div>
-            <div className="flex items-center gap-2 rounded-full bg-critical/10 px-3 py-1.5 text-sm font-medium text-critical">
-              <Flame className="h-4 w-4" /> {me?.streak ?? 0} day streak
+            <div className="flex shrink-0 items-center gap-2 rounded-full bg-critical/10 px-3 py-1.5 text-sm font-medium text-critical">
+              <Flame className="h-4 w-4" /> {streak} day streak
             </div>
           </div>
           <div className="mt-6">
@@ -83,21 +81,20 @@ function Rewards() {
           </div>
           <ol className="space-y-2">
             {board.map((row, i) => {
-              const isMe = row.id === user?.id;
+              const isMe = row.id === "me";
               return (
-                <li key={row.id} className={`flex items-center gap-3 rounded-xl border p-3 ${isMe ? "border-primary/40 gradient-bg/10 bg-accent" : "border-border bg-white"}`}>
-                  <div className="grid h-8 w-8 place-items-center rounded-full bg-muted text-sm font-bold">
-                    {i === 0 ? <Crown className="h-4 w-4 text-warn-foreground" /> : i === 1 ? <Medal className="h-4 w-4 text-muted-foreground" /> : i === 2 ? <Medal className="h-4 w-4 text-warn-foreground" /> : i + 1}
+                <li key={row.id} className={`flex items-center gap-3 rounded-xl border p-3 ${isMe ? "border-primary/40 bg-accent" : "border-border bg-white"}`}>
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-sm font-bold">
+                    {i === 0 ? <Crown className="h-4 w-4 text-warn-foreground" /> : i === 1 || i === 2 ? <Medal className="h-4 w-4 text-muted-foreground" /> : i + 1}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{row.display_name ?? "Anonymous"} {isMe && <span className="ml-1 text-xs text-primary">(you)</span>}</div>
+                    <div className="truncate text-sm font-medium">{row.display_name} {isMe && <span className="ml-1 text-xs text-primary">(you)</span>}</div>
                     <div className="text-xs text-muted-foreground"><Flame className="mr-1 inline h-3 w-3" />{row.streak} day streak</div>
                   </div>
-                  <div className="text-sm font-bold gradient-text">{row.points}</div>
+                  <div className="shrink-0 text-sm font-bold gradient-text">{row.points}</div>
                 </li>
               );
             })}
-            {board.length === 0 && <li className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Be the first to score points.</li>}
           </ol>
         </div>
       </div>
