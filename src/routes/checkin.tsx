@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { Mic, MicOff, Send, Sparkles, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { actions, useDemo, type Priority } from "@/lib/demo-store";
+import { checkinReply } from "@/lib/checkin.functions";
 
 export const Route = createFileRoute("/checkin")({
   head: () => ({ meta: [{ title: "Morning Check-in — Last Minute Life Saver" }] }),
