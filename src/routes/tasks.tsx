@@ -1,17 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { useAuth } from "@/lib/use-auth";
-import { supabase } from "@/integrations/supabase/client";
 import { Check, Plus, Trash2, Flame, Activity, Leaf } from "lucide-react";
-import { toast } from "sonner";
-
-type Task = {
-  id: string; title: string; description: string | null;
-  priority: "critical" | "medium" | "low";
-  status: "todo" | "doing" | "done";
-  focus_minutes: number; completed_at: string | null;
-};
+import { actions, useDemo, type Priority, type Task } from "@/lib/demo-store";
 
 export const Route = createFileRoute("/tasks")({
   head: () => ({ meta: [{ title: "Tasks — Last Minute Life Saver" }] }),
@@ -19,57 +10,18 @@ export const Route = createFileRoute("/tasks")({
 });
 
 function Tasks() {
-  const { user } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const tasks = useDemo((s) => s.tasks);
   const [title, setTitle] = useState("");
-  const [priority, setPriority] = useState<Task["priority"]>("medium");
-  const [filter, setFilter] = useState<"all" | Task["priority"]>("all");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [filter, setFilter] = useState<"all" | Priority>("all");
 
-  async function load() {
-    if (!user) return;
-    const { data } = await supabase.from("tasks").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    setTasks((data ?? []) as Task[]);
-  }
-  useEffect(() => { load(); }, [user]);
-
-  async function add() {
-    if (!user || !title.trim()) return;
-    const { error } = await supabase.from("tasks").insert({ user_id: user.id, title: title.trim(), priority });
-    if (error) return toast.error(error.message);
-    setTitle(""); load();
+  function add() {
+    if (!title.trim()) return;
+    actions.addTask(title.trim(), priority);
+    setTitle("");
   }
 
-  async function setStatus(t: Task, status: Task["status"]) {
-    const payload: Partial<Task> = { status };
-    if (status === "done") payload.completed_at = new Date().toISOString();
-    const { error } = await supabase.from("tasks").update(payload).eq("id", t.id);
-    if (error) return toast.error(error.message);
-    if (status === "done" && user) {
-      const bump = t.priority === "critical" ? 25 : t.priority === "medium" ? 15 : 8;
-      const { data: prof } = await supabase.from("profiles").select("points,streak,last_active_date").eq("id", user.id).maybeSingle();
-      const today = new Date().toISOString().slice(0, 10);
-      const newStreak = prof?.last_active_date === today ? (prof?.streak ?? 0) :
-        (prof?.last_active_date === new Date(Date.now() - 86400000).toISOString().slice(0,10) ? (prof?.streak ?? 0) + 1 : 1);
-      await supabase.from("profiles").update({
-        points: (prof?.points ?? 0) + bump,
-        streak: newStreak,
-        last_active_date: today,
-      }).eq("id", user.id);
-    }
-    load();
-  }
-
-  async function del(id: string) {
-    await supabase.from("tasks").delete().eq("id", id);
-    load();
-  }
-
-  async function setPriorityOf(t: Task, p: Task["priority"]) {
-    await supabase.from("tasks").update({ priority: p }).eq("id", t.id);
-    load();
-  }
-
-  const buckets: Record<Task["priority"], Task[]> = { critical: [], medium: [], low: [] };
+  const buckets: Record<Priority, Task[]> = { critical: [], medium: [], low: [] };
   tasks.filter((t) => filter === "all" || t.priority === filter).forEach((t) => buckets[t.priority].push(t));
 
   return (
@@ -79,7 +31,7 @@ function Tasks() {
           <h1 className="text-3xl font-bold">Tasks</h1>
           <p className="text-sm text-muted-foreground">Triage with priority cards. Done tasks earn points.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(["all", "critical", "medium", "low"] as const).map((f) => (
             <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize ${filter === f ? "gradient-bg" : "border border-border bg-white text-muted-foreground"}`}>{f}</button>
           ))}
@@ -87,7 +39,7 @@ function Tasks() {
       </div>
 
       <div className="glass-card mb-6 flex flex-wrap items-center gap-2 p-3">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="What needs to get done?" className="flex-1 rounded-xl border border-input bg-white px-4 py-2.5 text-sm outline-none focus:border-primary" />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="What needs to get done?" className="min-w-[12rem] flex-1 rounded-xl border border-input bg-white px-4 py-2.5 text-sm outline-none focus:border-primary" />
         <div className="flex gap-1">
           {(["critical","medium","low"] as const).map((p) => (
             <button key={p} onClick={() => setPriority(p)} className={`rounded-full px-3 py-2 text-xs font-medium capitalize transition ${priority === p ? pclass(p, true) : "border border-border bg-white text-muted-foreground"}`}>{p}</button>
@@ -97,17 +49,16 @@ function Tasks() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Column title="Critical" icon={<Flame className="h-4 w-4" />} color="critical" tasks={buckets.critical} setStatus={setStatus} del={del} setPriorityOf={setPriorityOf} />
-        <Column title="Medium" icon={<Activity className="h-4 w-4" />} color="warn" tasks={buckets.medium} setStatus={setStatus} del={del} setPriorityOf={setPriorityOf} />
-        <Column title="Low" icon={<Leaf className="h-4 w-4" />} color="success" tasks={buckets.low} setStatus={setStatus} del={del} setPriorityOf={setPriorityOf} />
+        <Column title="Critical" icon={<Flame className="h-4 w-4" />} color="critical" tasks={buckets.critical} />
+        <Column title="Medium" icon={<Activity className="h-4 w-4" />} color="warn" tasks={buckets.medium} />
+        <Column title="Low" icon={<Leaf className="h-4 w-4" />} color="success" tasks={buckets.low} />
       </div>
     </div>
   );
 }
 
-function Column({ title, icon, color, tasks, setStatus, del, setPriorityOf }: {
+function Column({ title, icon, color, tasks }: {
   title: string; icon: React.ReactNode; color: "critical" | "warn" | "success"; tasks: Task[];
-  setStatus: (t: Task, s: Task["status"]) => void; del: (id: string) => void; setPriorityOf: (t: Task, p: Task["priority"]) => void;
 }) {
   const chip = color === "critical"
     ? "bg-critical/15 text-critical"
@@ -126,7 +77,7 @@ function Column({ title, icon, color, tasks, setStatus, del, setPriorityOf }: {
         {tasks.map((t) => (
           <li key={t.id} className={`group rounded-xl border border-border bg-white p-3 transition hover:shadow-[var(--shadow-card)] ${t.status === "done" ? "opacity-60" : ""}`}>
             <div className="flex items-start gap-2">
-              <button onClick={() => setStatus(t, t.status === "done" ? "todo" : "done")} className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border ${t.status === "done" ? "gradient-bg border-transparent" : "border-border"}`}>
+              <button onClick={() => actions.setStatus(t.id, t.status === "done" ? "todo" : "done")} className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border ${t.status === "done" ? "gradient-bg border-transparent" : "border-border"}`}>
                 {t.status === "done" && <Check className="h-3 w-3 text-white" />}
               </button>
               <div className="min-w-0 flex-1">
@@ -135,11 +86,11 @@ function Column({ title, icon, color, tasks, setStatus, del, setPriorityOf }: {
                   {t.focus_minutes ? `${t.focus_minutes}m` : "—"}
                 </div>
               </div>
-              <button onClick={() => del(t.id)} className="opacity-0 transition group-hover:opacity-100"><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></button>
+              <button onClick={() => actions.removeTask(t.id)} className="opacity-0 transition group-hover:opacity-100"><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></button>
             </div>
             <div className="mt-2 flex gap-1">
               {(["critical","medium","low"] as const).map((p) => (
-                <button key={p} onClick={() => setPriorityOf(t, p)} className={`flex-1 rounded-md py-1 text-[10px] font-medium capitalize ${t.priority === p ? pclass(p, true) : "bg-muted text-muted-foreground"}`}>{p}</button>
+                <button key={p} onClick={() => actions.setPriority(t.id, p)} className={`flex-1 rounded-md py-1 text-[10px] font-medium capitalize ${t.priority === p ? pclass(p, true) : "bg-muted text-muted-foreground"}`}>{p}</button>
               ))}
             </div>
           </li>
@@ -149,7 +100,7 @@ function Column({ title, icon, color, tasks, setStatus, del, setPriorityOf }: {
   );
 }
 
-function pclass(p: "critical" | "medium" | "low", active: boolean) {
+function pclass(p: Priority, active: boolean) {
   if (!active) return "";
   if (p === "critical") return "bg-critical text-critical-foreground";
   if (p === "medium") return "bg-warn text-warn-foreground";
