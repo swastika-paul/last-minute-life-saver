@@ -1,6 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { useAuth } from "@/lib/use-auth";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Sparkles, CalendarClock, Trophy, Mic, ListChecks, LineChart } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -14,10 +12,6 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
-  useEffect(() => { if (!loading && user) navigate({ to: "/checkin" }); }, [user, loading, navigate]);
-
   return (
     <main className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
@@ -25,7 +19,7 @@ function Landing() {
           <div className="grid h-9 w-9 place-items-center rounded-xl gradient-bg"><Sparkles className="h-5 w-5" /></div>
           <span className="font-display text-lg font-bold">Last Minute Life Saver</span>
         </div>
-        <Link to="/auth" className="rounded-full gradient-bg px-5 py-2 text-sm font-medium shadow-[var(--shadow-glow)]">Get started</Link>
+        <Link to="/checkin" className="rounded-full gradient-bg px-5 py-2 text-sm font-medium shadow-[var(--shadow-glow)]">Open app</Link>
       </header>
 
       <section className="mx-auto max-w-6xl px-6 pt-10 pb-16 text-center">
@@ -39,7 +33,7 @@ function Landing() {
           Talk to your AI each morning, get a priority-ranked plan, auto-schedule it onto your calendar, and watch your streak grow.
         </p>
         <div className="mt-8 flex justify-center gap-3">
-          <Link to="/auth" className="rounded-full gradient-bg px-6 py-3 text-sm font-semibold shadow-[var(--shadow-glow)]">Start free</Link>
+          <Link to="/checkin" className="rounded-full gradient-bg px-6 py-3 text-sm font-semibold shadow-[var(--shadow-glow)]">Try the demo</Link>
           <a href="#features" className="rounded-full border border-primary/20 bg-white/60 px-6 py-3 text-sm font-semibold backdrop-blur">See features</a>
         </div>
 
