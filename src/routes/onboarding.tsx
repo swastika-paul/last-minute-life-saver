@@ -1,10 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/use-auth";
 import { Mic, MicOff, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { actions, useDemo } from "@/lib/demo-store";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({ meta: [{ title: "Onboarding — Last Minute Life Saver" }] }),
@@ -12,19 +11,12 @@ export const Route = createFileRoute("/onboarding")({
 });
 
 function Onboarding() {
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [text, setText] = useState("");
+  const stored = useDemo((s) => s.lifestyle);
+  const [text, setText] = useState(stored);
   const [listening, setListening] = useState(false);
   const [saving, setSaving] = useState(false);
   const recRef = useRef<any>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("profiles").select("lifestyle, onboarded").eq("id", user.id).maybeSingle().then(({ data }) => {
-      if (data?.lifestyle) setText(data.lifestyle);
-    });
-  }, [user]);
 
   function toggleListen() {
     const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -34,9 +26,7 @@ function Onboarding() {
     rec.continuous = true; rec.interimResults = true; rec.lang = "en-US";
     rec.onresult = (e: any) => {
       let finalText = "";
-      for (let i = 0; i < e.results.length; i++) {
-        finalText += e.results[i][0].transcript;
-      }
+      for (let i = 0; i < e.results.length; i++) finalText += e.results[i][0].transcript;
       setText(finalText);
     };
     rec.onerror = () => setListening(false);
@@ -46,16 +36,14 @@ function Onboarding() {
     setListening(true);
   }
 
-  async function save() {
-    if (!user) return;
+  function save() {
     setSaving(true);
-    const { error } = await supabase.from("profiles").upsert({
-      id: user.id, lifestyle: text, onboarded: true,
-    });
-    setSaving(false);
-    if (error) return toast.error(error.message);
-    toast.success("Saved. Let's begin!");
-    navigate({ to: "/checkin" });
+    setTimeout(() => {
+      actions.setLifestyle(text);
+      setSaving(false);
+      toast.success("Saved. Let's begin!");
+      navigate({ to: "/checkin" });
+    }, 400);
   }
 
   return (
