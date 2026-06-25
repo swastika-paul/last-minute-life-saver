@@ -46,7 +46,6 @@ function Tasks() {
     if (error) return toast.error(error.message);
     if (status === "done" && user) {
       const bump = t.priority === "critical" ? 25 : t.priority === "medium" ? 15 : 8;
-      await supabase.rpc.bind(supabase); // no-op for typecheck
       const { data: prof } = await supabase.from("profiles").select("points,streak,last_active_date").eq("id", user.id).maybeSingle();
       const today = new Date().toISOString().slice(0, 10);
       const newStreak = prof?.last_active_date === today ? (prof?.streak ?? 0) :
@@ -110,10 +109,15 @@ function Column({ title, icon, color, tasks, setStatus, del, setPriorityOf }: {
   title: string; icon: React.ReactNode; color: "critical" | "warn" | "success"; tasks: Task[];
   setStatus: (t: Task, s: Task["status"]) => void; del: (id: string) => void; setPriorityOf: (t: Task, p: Task["priority"]) => void;
 }) {
+  const chip = color === "critical"
+    ? "bg-critical/15 text-critical"
+    : color === "warn"
+    ? "bg-warn/20 text-warn-foreground"
+    : "bg-success/15 text-success-foreground";
   return (
     <section className="soft-card p-4">
       <header className="mb-3 flex items-center justify-between">
-        <div className={`flex items-center gap-2 rounded-full bg-${color}/15 px-3 py-1 text-xs font-semibold text-${color === "warn" ? "warn-foreground" : color === "success" ? "success-foreground" : "critical"}`}>
+        <div className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${chip}`}>
           {icon} {title} <span className="opacity-70">· {tasks.length}</span>
         </div>
       </header>
