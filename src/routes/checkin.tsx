@@ -42,42 +42,28 @@ function Checkin() {
     rec.start(); recRef.current = rec; setListening(true);
   }
 
-  function mockReply(text: string): { reply: string; tasks: Suggested[] } {
-    // Lightweight heuristic to feel alive in UI demo.
-    const lower = text.toLowerCase();
-    const tasks: Suggested[] = [];
-    const guesses: { kw: string[]; t: Suggested }[] = [
-      { kw: ["deck", "pitch", "investor"], t: { title: "Polish investor deck", priority: "critical", estimateMinutes: 60 } },
-      { kw: ["email", "inbox", "reply"], t: { title: "Clear inbox", priority: "medium", estimateMinutes: 20 } },
-      { kw: ["gym", "workout", "run"], t: { title: "Workout session", priority: "medium", estimateMinutes: 45 } },
-      { kw: ["read", "book"], t: { title: "Read 20 pages", priority: "low", estimateMinutes: 25 } },
-      { kw: ["call", "mom", "friend"], t: { title: "Catch-up call", priority: "low", estimateMinutes: 15 } },
-      { kw: ["study", "exam", "thesis"], t: { title: "Focused study block", priority: "critical", estimateMinutes: 90 } },
-    ];
-    for (const g of guesses) if (g.kw.some((k) => lower.includes(k))) tasks.push(g.t);
-    if (tasks.length === 0) tasks.push({ title: text.slice(0, 60), priority: "medium", estimateMinutes: 25 });
-    const reply = `Got it. I picked out ${tasks.length} thing${tasks.length > 1 ? "s" : ""} from that — want me to add them to your day?`;
-    return { reply, tasks };
-  }
-
-  function send() {
+  async function send() {
     if (!input.trim() || busy) return;
     const userMsg: Msg = { role: "user", content: input.trim() };
-    setMessages((m) => [...m, userMsg]);
+    const nextHistory = [...messages, userMsg];
+    setMessages(nextHistory);
     setInput("");
     setBusy(true);
-    setTimeout(() => {
-      const res = mockReply(userMsg.content);
+    try {
+      const res = await checkinReply({
+        data: {
+          history: nextHistory.map((m) => ({ role: m.role, content: m.content })),
+          lifestyle: lifestyle || undefined,
+        },
+      });
       setMessages((m) => [...m, { role: "assistant", content: res.reply }]);
-      setSuggested((s) => [...s, ...res.tasks]);
+      if (res.tasks.length) setSuggested((s) => [...s, ...res.tasks]);
+    } catch (e: any) {
+      toast.error(e?.message ?? "AI failed to respond");
+      setMessages((m) => [...m, { role: "assistant", content: "Sorry — I couldn't reach the AI just now." }]);
+    } finally {
       setBusy(false);
-    }, 600);
-  }
-
-  function addTask(t: Suggested) {
-    actions.addTask(t.title, t.priority, t.estimateMinutes);
-    setSuggested((s) => s.filter((x) => x !== t));
-    toast.success("Added to tasks");
+    }
   }
   function addAll() {
     suggested.forEach((t) => actions.addTask(t.title, t.priority, t.estimateMinutes));
