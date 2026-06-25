@@ -1,12 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { useAuth } from "@/lib/use-auth";
-import { supabase } from "@/integrations/supabase/client";
-import { checkinReply } from "@/lib/ai.functions";
-import { useServerFn } from "@tanstack/react-start";
 import { Mic, MicOff, Send, Sparkles, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { actions, useDemo, type Priority } from "@/lib/demo-store";
 
 export const Route = createFileRoute("/checkin")({
   head: () => ({ meta: [{ title: "Morning Check-in — Last Minute Life Saver" }] }),
@@ -14,28 +11,19 @@ export const Route = createFileRoute("/checkin")({
 });
 
 type Msg = { role: "user" | "assistant"; content: string };
-type Suggested = { title: string; priority: "critical" | "medium" | "low"; estimateMinutes: number };
+type Suggested = { title: string; priority: Priority; estimateMinutes: number };
 
 function Checkin() {
-  const { user } = useAuth();
-  const callAI = useServerFn(checkinReply);
+  const lifestyle = useDemo((s) => s.lifestyle);
   const [messages, setMessages] = useState<Msg[]>([
     { role: "assistant", content: "Good to see you. How are you feeling, and what's on your mind today?" },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [suggested, setSuggested] = useState<Suggested[]>([]);
-  const [lifestyle, setLifestyle] = useState<string | undefined>();
   const [listening, setListening] = useState(false);
   const recRef = useRef<any>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("profiles").select("lifestyle, onboarded").eq("id", user.id).maybeSingle().then(({ data }) => {
-      setLifestyle(data?.lifestyle ?? undefined);
-    });
-  }, [user]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, suggested]);
 
@@ -53,36 +41,47 @@ function Checkin() {
     rec.start(); recRef.current = rec; setListening(true);
   }
 
-  async function send() {
-    if (!input.trim() || busy) return;
-    const userMsg: Msg = { role: "user", content: input.trim() };
-    const next = [...messages, userMsg];
-    setMessages(next); setInput(""); setBusy(true);
-    try {
-      const res = await callAI({ data: { history: next, lifestyle } });
-      setMessages((m) => [...m, { role: "assistant", content: res.reply }]);
-      if (res.tasks.length) setSuggested((s) => [...s, ...res.tasks]);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally { setBusy(false); }
+  function mockReply(text: string): { reply: string; tasks: Suggested[] } {
+    // Lightweight heuristic to feel alive in UI demo.
+    const lower = text.toLowerCase();
+    const tasks: Suggested[] = [];
+    const guesses: { kw: string[]; t: Suggested }[] = [
+      { kw: ["deck", "pitch", "investor"], t: { title: "Polish investor deck", priority: "critical", estimateMinutes: 60 } },
+      { kw: ["email", "inbox", "reply"], t: { title: "Clear inbox", priority: "medium", estimateMinutes: 20 } },
+      { kw: ["gym", "workout", "run"], t: { title: "Workout session", priority: "medium", estimateMinutes: 45 } },
+      { kw: ["read", "book"], t: { title: "Read 20 pages", priority: "low", estimateMinutes: 25 } },
+      { kw: ["call", "mom", "friend"], t: { title: "Catch-up call", priority: "low", estimateMinutes: 15 } },
+      { kw: ["study", "exam", "thesis"], t: { title: "Focused study block", priority: "critical", estimateMinutes: 90 } },
+    ];
+    for (const g of guesses) if (g.kw.some((k) => lower.includes(k))) tasks.push(g.t);
+    if (tasks.length === 0) tasks.push({ title: text.slice(0, 60), priority: "medium", estimateMinutes: 25 });
+    const reply = `Got it. I picked out ${tasks.length} thing${tasks.length > 1 ? "s" : ""} from that — want me to add them to your day?`;
+    return { reply, tasks };
   }
 
-  async function addTask(t: Suggested) {
-    if (!user) return;
-    const { error } = await supabase.from("tasks").insert({
-      user_id: user.id, title: t.title, priority: t.priority, focus_minutes: t.estimateMinutes,
-    });
-    if (error) return toast.error(error.message);
+  function send() {
+    if (!input.trim() || busy) return;
+    const userMsg: Msg = { role: "user", content: input.trim() };
+    setMessages((m) => [...m, userMsg]);
+    setInput("");
+    setBusy(true);
+    setTimeout(() => {
+      const res = mockReply(userMsg.content);
+      setMessages((m) => [...m, { role: "assistant", content: res.reply }]);
+      setSuggested((s) => [...s, ...res.tasks]);
+      setBusy(false);
+    }, 600);
+  }
+
+  function addTask(t: Suggested) {
+    actions.addTask(t.title, t.priority, t.estimateMinutes);
     setSuggested((s) => s.filter((x) => x !== t));
     toast.success("Added to tasks");
   }
-  async function addAll() {
-    if (!user || !suggested.length) return;
-    const { error } = await supabase.from("tasks").insert(suggested.map((t) => ({
-      user_id: user.id, title: t.title, priority: t.priority, focus_minutes: t.estimateMinutes,
-    })));
-    if (error) return toast.error(error.message);
-    setSuggested([]); toast.success("All tasks added");
+  function addAll() {
+    suggested.forEach((t) => actions.addTask(t.title, t.priority, t.estimateMinutes));
+    setSuggested([]);
+    toast.success("All tasks added");
   }
 
   return (
@@ -103,11 +102,11 @@ function Checkin() {
         </div>
 
         <div className="mt-3 flex items-end gap-2 rounded-2xl border border-input bg-white p-2">
-          <button onClick={toggleListen} className={`grid h-10 w-10 place-items-center rounded-xl ${listening ? "bg-destructive text-destructive-foreground" : "bg-accent text-primary"}`}>
+          <button onClick={toggleListen} className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${listening ? "bg-destructive text-destructive-foreground" : "bg-accent text-primary"}`}>
             {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
           </button>
-          <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1} placeholder="Tell the AI what's going on…" className="flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
-          <button onClick={send} disabled={busy || !input.trim()} className="grid h-10 w-10 place-items-center rounded-xl gradient-bg disabled:opacity-50"><Send className="h-4 w-4" /></button>
+          <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} rows={1} placeholder="Tell the AI what's going on…" className="min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
+          <button onClick={send} disabled={busy || !input.trim()} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl gradient-bg disabled:opacity-50"><Send className="h-4 w-4" /></button>
         </div>
       </div>
 
@@ -123,13 +122,13 @@ function Checkin() {
             <ul className="mt-3 space-y-2">
               {suggested.map((t, i) => (
                 <li key={i} className="flex items-start justify-between gap-2 rounded-xl border border-border bg-white p-3">
-                  <div>
-                    <div className="text-sm font-medium">{t.title}</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{t.title}</div>
                     <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
                       <PriorityPill p={t.priority} /> · {t.estimateMinutes}m
                     </div>
                   </div>
-                  <button onClick={() => addTask(t)} className="grid h-7 w-7 place-items-center rounded-full gradient-bg"><Plus className="h-4 w-4" /></button>
+                  <button onClick={() => addTask(t)} className="grid h-7 w-7 shrink-0 place-items-center rounded-full gradient-bg"><Plus className="h-4 w-4" /></button>
                 </li>
               ))}
             </ul>
@@ -146,7 +145,7 @@ function Checkin() {
   );
 }
 
-function PriorityPill({ p }: { p: "critical" | "medium" | "low" }) {
-  const map = { critical: "bg-critical/15 text-critical", medium: "bg-warn/20 text-warn-foreground", low: "bg-success/15 text-success-foreground" };
+function PriorityPill({ p }: { p: Priority }) {
+  const map = { critical: "bg-critical/15 text-critical", medium: "bg-warn/20 text-warn-foreground", low: "bg-success/15 text-success-foreground" } as const;
   return <span className={`rounded-full px-2 py-0.5 ${map[p]}`}>{p}</span>;
 }
