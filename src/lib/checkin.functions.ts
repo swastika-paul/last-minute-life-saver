@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { GoogleGenAI } from "@google/genai";
 
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-2.5-flash";
 
 export const checkinReply = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -16,45 +15,67 @@ export const checkinReply = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("Missing LOVABLE_API_KEY");
-
     const system = `You are "Last Minute", a warm, concise AI productivity coach running a morning check-in.
 
 Your job:
-- Read what the user actually said. Understand the real intent (work, study, errands, health, social, rest).
-- Break vague goals into concrete, doable tasks. Example: "I will solve dsa 4 ques today" -> 4 separate tasks like "Solve DSA question 1", "Solve DSA question 2", etc., each ~30m, priority "critical" (study/work commitment).
-- Never echo back filler like "yes" / "ok" / "thanks" as a task. If the user only confirms or chit-chats, return an empty tasks array.
-- Pick priority intelligently:
-  * critical: deadlines, exams, work deliverables, study commitments, urgent calls
-  * medium: health (gym, walk), routines, planning, errands
-  * low: leisure, reading, tidying, hobbies
-- Estimate minutes realistically (15-120).
-- Reply in ONE short friendly sentence (max ~18 words). Do NOT list the tasks in the reply — the UI shows them separately.
+- Read what the user actually said.
+- Break vague goals into concrete, doable tasks.
+- Never create tasks from filler messages.
+- Pick priority intelligently.
+- Estimate minutes realistically.
+- Reply in ONE short friendly sentence.
 
 Return STRICT JSON only:
-{ "reply": string, "tasks": [{ "title": string, "priority": "critical"|"medium"|"low", "estimateMinutes": number }] }
-
-User lifestyle context: ${data.lifestyle || "unknown"}`;
-
-    const res = await fetch(GATEWAY, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [{ role: "system", content: system }, ...data.history],
-        response_format: { type: "json_object" },
-      }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      if (res.status === 429) throw new Error("Rate limited — try again in a moment.");
-      if (res.status === 402) throw new Error("AI credits exhausted.");
-      throw new Error(`AI error ${res.status}: ${text.slice(0, 200)}`);
+{
+  "reply": string,
+  "tasks": [
+    {
+      "title": string,
+      "priority": "critical"|"medium"|"low",
+      "estimateMinutes": number
     }
-    const json = await res.json();
-    const content = json?.choices?.[0]?.message?.content ?? "{}";
+  ]
+}
+
+User lifestyle context: ${data.lifestyle || "unknown"}
+`;
+ const apiKey = process.env.GEMINI_API_KEY;
+
+if (!apiKey) {
+  throw new Error("Missing GEMINI_API_KEY");
+}
+
+const ai = new GoogleGenAI({ apiKey });
+
+const prompt = `
+${system}
+
+Conversation:
+${data.history
+  .map((m) => `${m.role}: ${m.content}`)
+  .join("\n")}
+
+IMPORTANT:
+Return ONLY valid JSON.
+`;
+
+const response = await ai.models.generateContent({
+  model: "gemini-2.5-flash",
+  contents: prompt,
+});
+let content = response.text ?? "{}";
+
+console.log("RAW GEMINI RESPONSE:");
+console.log(content);
+
+content = content
+  .replace(/```json/g, "")
+  .replace(/```/g, "")
+  .trim();
+
     try {
+      console.log("Gemini response:");
+console.log(content);
       const parsed = JSON.parse(content);
       return {
         reply: String(parsed.reply ?? "Got it."),
@@ -66,7 +87,10 @@ User lifestyle context: ${data.lifestyle || "unknown"}`;
             }))
           : [],
       };
-    } catch {
-      return { reply: "Got it.", tasks: [] };
-    }
+    } catch (err) {
+  console.error("PARSE ERROR:", err);
+  console.error("RAW CONTENT:", content);
+
+  return { reply: "Got it.", tasks: [] };
+}
   });

@@ -1,25 +1,39 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { GoogleGenAI } from "@google/genai";
 
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
 const MODEL = "google/gemini-2.5-flash";
 
-async function callAI(body: unknown) {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  const res = await fetch(GATEWAY, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    if (res.status === 429) throw new Error("Rate limited — try again in a moment.");
-    if (res.status === 402) throw new Error("AI credits exhausted. Add credits to continue.");
-    throw new Error(`AI error ${res.status}: ${text.slice(0, 200)}`);
+
+async function callAI(body: any) {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Missing GEMINI_API_KEY");
   }
-  return res.json();
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  const prompt = body.messages
+    .map((m: any) => `${m.role}: ${m.content}`)
+    .join("\n");
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: prompt,
+  });
+
+  return {
+    choices: [
+      {
+        message: {
+          content: response.text,
+        },
+      },
+    ],
+  };
 }
 
 /** Morning check-in: AI listens to user, replies warmly, and extracts tasks. */
@@ -50,6 +64,7 @@ User lifestyle context: ${data.lifestyle ?? "unknown"}`;
     });
     const content = json?.choices?.[0]?.message?.content ?? "{}";
     try {
+      
       const parsed = JSON.parse(content);
       return {
         reply: String(parsed.reply ?? "Got it."),
