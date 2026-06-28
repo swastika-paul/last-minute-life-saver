@@ -80,12 +80,21 @@ function Column({ title, icon, color, tasks }: {
               <button onClick={() => actions.setStatus(t.id, t.status === "done" ? "todo" : "done")} className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border ${t.status === "done" ? "gradient-bg border-transparent" : "border-border"}`}>
                 {t.status === "done" && <Check className="h-3 w-3 text-white" />}
               </button>
-              <div className="min-w-0 flex-1">
-                <div className={`text-sm font-medium ${t.status === "done" ? "line-through" : ""}`}>{t.title}</div>
-                <div className="mt-1 flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {t.focus_minutes ? `${t.focus_minutes}m` : "—"}
-                </div>
-              </div>
+             <div className="min-w-0 flex-1">
+  <div className={`text-sm font-medium ${t.status === "done" ? "line-through" : ""}`}>
+    {t.title}
+  </div>
+
+  {t.startTime && (
+    <div className="text-xs text-primary mt-1">
+      ⏰ {t.startTime} - {t.endTime}
+    </div>
+  )}
+
+  <div className="mt-1 flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+    {t.focus_minutes ? `${t.focus_minutes}m` : "—"}
+  </div>
+</div>
               <button onClick={() => actions.removeTask(t.id)} className="opacity-0 transition group-hover:opacity-100"><Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" /></button>
             </div>
             <div className="mt-2 flex gap-1">

@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
-import { Flame, Timer, Gauge, Snowflake } from "lucide-react";
+import { Flame, Timer, Gauge, Snowflake,Bell } from "lucide-react";
 import { useDemo } from "@/lib/demo-store";
+
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({ meta: [{ title: "Analytics — Last Minute Life Saver" }] }),
@@ -13,9 +14,36 @@ function Analytics() {
   const tasks = useDemo((s) => s.tasks);
   const events = useDemo((s) => s.events);
   const streak = useDemo((s) => s.streak);
+const points = useDemo((s) => s.points);
 
+const getRank = (points:number) => {
+  if(points >= 1000) return "Productivity Master";
+  if(points >= 500) return "Focus Champion";
+  if(points >= 250) return "Task Warrior";
+  return "Beginner";
+};
+
+const rank = getRank(points);
+
+const enableNotifications = () => {
+  if (!("Notification" in window)) {
+    alert("This browser does not support notifications");
+    return;
+  }
+
+  Notification.requestPermission().then((permission) => {
+    if (permission === "granted") {
+      new Notification("🎉 Notifications Enabled!", {
+        body: "You'll receive task reminders.",
+      });
+    }
+  });
+};
   const total = tasks.length || 1;
   const done = tasks.filter((t) => t.status === "done").length;
+  const pending = tasks.filter(
+  (t) => t.status !== "done"
+).length;
   const score = Math.round((done / total) * 100);
   const procrastination = Math.max(0, 100 - score);
   const focusMin = Math.round(
@@ -33,13 +61,39 @@ function Analytics() {
   const cards = [
     { label: "Focus time today", value: `${focusMin}m`, icon: Timer },
     { label: "Productivity score", value: `${score}%`, icon: Gauge },
-    { label: "Procrastination rate", value: `${procrastination}%`, icon: Snowflake },
+{
+  label: "XP Points",
+  value: points,
+  icon: Flame,
+},
+{
+  label: "Completed",
+  value: done,
+  icon: Gauge,
+},
+{
+  label: "Pending",
+  value: pending,
+  icon: Timer,
+},
     { label: "Streak", value: `${streak} 🔥`, icon: Flame },
   ];
 
   return (
     <div>
       <h1 className="mb-6 text-3xl font-bold">Analytics</h1>
+      <div className="glass-card mb-6 p-6">
+  <h2 className="text-2xl font-bold">
+    🏆 {rank}
+  </h2>
+
+  <div className="mt-3 flex gap-6 flex-wrap">
+    <span>⭐ XP: {points}</span>
+    <span>🔥 Streak: {streak}</span>
+    <span>✅ Completed: {done}</span>
+  </div>
+</div>
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((c) => (
           <div key={c.label} className="glass-card p-5">
@@ -72,6 +126,50 @@ function Analytics() {
           </ResponsiveContainer>
         </div>
       </div>
+      <div className="glass-card mt-6 p-5">
+  <h2 className="mb-4 font-semibold">
+    Achievements
+  </h2>
+
+  <div className="flex flex-wrap gap-3">
+    {streak >= 3 && (
+      <div className="rounded-xl border px-4 py-2">
+        🔥 3 Day Streak
+      </div>
+    )}
+
+    {done >= 10 && (
+      <div className="rounded-xl border px-4 py-2">
+        ⚡ First 10 Tasks
+      </div>
+    )}
+
+    {done >= 25 && (
+      <div className="rounded-xl border px-4 py-2">
+        🎯 Task Crusher
+      </div>
+    )}
+
+    {points >= 250 && (
+      <div className="rounded-xl border px-4 py-2">
+        🏆 Task Warrior
+      </div>
+    )}
+  </div>
+</div>
+<div className="glass-card mt-6 p-5">
+  <h2 className="mb-3 font-semibold">
+    Notifications
+  </h2>
+
+  <button
+    onClick={enableNotifications}
+    className="rounded-xl px-4 py-2 bg-primary text-white flex items-center gap-2"
+  >
+    <Bell className="h-4 w-4" />
+    Enable Notifications
+  </button>
+</div>
     </div>
   );
 }

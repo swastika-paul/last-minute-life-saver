@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
-
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export const checkinReply = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
@@ -14,29 +14,37 @@ export const checkinReply = createServerFn({ method: "POST" })
       })
       .parse(d),
   )
-  .handler(async ({ data }) => {
-    const system = `You are "Last Minute", a warm, concise AI productivity coach running a morning check-in.
+ 
+.handler(async ({ context, data }) => {
+  
+  const system = `
+You are "Last Minute", an AI productivity coach.
+
+User Lifestyle:
+${data.lifestyle ?? "unknown"}
 
 Your job:
-- Read what the user actually said.
-- Break vague goals into concrete, doable tasks.
-- Never create tasks from filler messages.
-- Pick priority intelligently.
-- Estimate minutes realistically.
-- Reply in ONE short friendly sentence.
 
-Return STRICT JSON only:
+1. Understand the user's routine.
+2. Extract tasks.
+3. Respect fixed commitments mentioned by the user.
+4. Suggest realistic start and end times.
+5. Return STRICT JSON ONLY.
+
+Format:
+
 {
-  "reply": string,
-  "tasks": [
+  "reply":"string",
+  "tasks":[
     {
-      "title": string,
-      "priority": "critical"|"medium"|"low",
-      "estimateMinutes": number
+      "title":"string",
+      "priority":"critical|medium|low",
+      "estimateMinutes":60,
+      "startTime":"14:00",
+      "endTime":"15:00"
     }
   ]
 }
-
 User lifestyle context: ${data.lifestyle || "unknown"}
 `;
  const apiKey = process.env.GEMINI_API_KEY;
@@ -76,21 +84,39 @@ content = content
     try {
       console.log("Gemini response:");
 console.log(content);
-      const parsed = JSON.parse(content);
-      return {
-        reply: String(parsed.reply ?? "Got it."),
-        tasks: Array.isArray(parsed.tasks)
-          ? parsed.tasks.slice(0, 10).map((t: any) => ({
-              title: String(t.title ?? "Task").slice(0, 120),
-              priority: ["critical", "medium", "low"].includes(t.priority) ? t.priority : "medium",
-              estimateMinutes: Math.max(10, Math.min(180, Number(t.estimateMinutes) || 30)),
-            }))
-          : [],
-      };
-    } catch (err) {
+const parsed = JSON.parse(content);
+
+const tasks = Array.isArray(parsed.tasks)
+  ? parsed.tasks.slice(0, 8).map((t: any) => ({
+      title: String(t.title ?? "Task"),
+
+      priority:
+        ["critical", "medium", "low"].includes(t.priority)
+          ? t.priority
+          : "medium",
+
+      estimateMinutes: Math.max(
+        15,
+        Math.min(180, Number(t.estimateMinutes) || 30)
+      ),
+
+      startTime: String(t.startTime ?? ""),
+      endTime: String(t.endTime ?? ""),
+    }))
+  : [];
+
+return {
+  reply: String(parsed.reply ?? "Got it."),
+  tasks,
+};
+} catch (err) {
   console.error("PARSE ERROR:", err);
   console.error("RAW CONTENT:", content);
-
-  return { reply: "Got it.", tasks: [] };
+ return {
+    reply: "Got it.",
+    tasks: [],
+  };
+  
 }
-  });
+ 
+});

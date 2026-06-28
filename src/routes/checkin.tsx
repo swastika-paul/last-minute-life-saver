@@ -12,7 +12,9 @@ export const Route = createFileRoute("/checkin")({
 });
 
 type Msg = { role: "user" | "assistant"; content: string };
-type Suggested = { title: string; priority: Priority; estimateMinutes: number };
+type Suggested = { title: string; priority: Priority; estimateMinutes: number ;
+  startTime?: string;
+  endTime?: string; };
 
 function Checkin() {
   const lifestyle = useDemo((s) => s.lifestyle);
@@ -57,7 +59,22 @@ function Checkin() {
         },
       });
       setMessages((m) => [...m, { role: "assistant", content: res.reply }]);
-      if (res.tasks.length) setSuggested((s) => [...s, ...res.tasks]);
+   if (res.tasks.length) {
+res.tasks.forEach((task:any) => {
+  console.log("TASKS FROM AI:", res.tasks);
+  actions.addTask(
+    task.title,
+    task.priority,
+    task.estimateMinutes,
+    task.startTime,
+    task.endTime
+  );
+});
+
+
+
+  setSuggested((s) => [...s, ...res.tasks]);
+}
     } catch (e: any) {
       toast.error(e?.message ?? "AI failed to respond");
       setMessages((m) => [...m, { role: "assistant", content: "Sorry — I couldn't reach the AI just now." }]);
@@ -66,12 +83,16 @@ function Checkin() {
     }
   }
   function addTask(t: Suggested) {
-    actions.addTask(t.title, t.priority, t.estimateMinutes);
+    actions.addTask(t.title, t.priority, t.estimateMinutes,
+    t.startTime,
+    t.endTime);
     setSuggested((s) => s.filter((x) => x !== t));
     toast.success("Added to tasks");
   }
   function addAll() {
-    suggested.forEach((t) => actions.addTask(t.title, t.priority, t.estimateMinutes));
+    suggested.forEach((t) => actions.addTask(t.title, t.priority, t.estimateMinutes ,
+    t.startTime,
+    t.endTime));
     setSuggested([]);
     toast.success("All tasks added");
   }
@@ -116,9 +137,15 @@ function Checkin() {
                 <li key={i} className="flex items-start justify-between gap-2 rounded-xl border border-border bg-white p-3">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{t.title}</div>
-                    <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
-                      <PriorityPill p={t.priority} /> · {t.estimateMinutes}m
-                    </div>
+                   <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+  <PriorityPill p={t.priority} /> · {t.estimateMinutes}m
+</div>
+
+{t.startTime && (
+  <div className="mt-1 text-xs text-primary">
+    ⏰ {t.startTime} - {t.endTime}
+  </div>
+)}
                   </div>
                   <button onClick={() => addTask(t)} className="grid h-7 w-7 shrink-0 place-items-center rounded-full gradient-bg"><Plus className="h-4 w-4" /></button>
                 </li>

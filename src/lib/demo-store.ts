@@ -12,6 +12,9 @@ export type Task = {
   focus_minutes: number;
   created_at: string;
   completed_at: string | null;
+
+  startTime?: string;
+  endTime?: string;
 };
 
 export type CalEvent = {
@@ -38,28 +41,37 @@ const todayAt = (h: number, m = 0) => {
 };
 
 const initial: State = {
-  tasks: [
-    { id: uid(), title: "Finish investor deck v2", priority: "critical", status: "todo", focus_minutes: 60, created_at: new Date().toISOString(), completed_at: null },
-    { id: uid(), title: "Reply to Priya's email", priority: "critical", status: "todo", focus_minutes: 15, created_at: new Date().toISOString(), completed_at: null },
-    { id: uid(), title: "Gym — leg day", priority: "medium", status: "todo", focus_minutes: 45, created_at: new Date().toISOString(), completed_at: null },
-    { id: uid(), title: "Plan weekend trip", priority: "medium", status: "todo", focus_minutes: 30, created_at: new Date().toISOString(), completed_at: null },
-    { id: uid(), title: "Read 20 pages", priority: "low", status: "done", focus_minutes: 25, created_at: new Date().toISOString(), completed_at: new Date().toISOString() },
-    { id: uid(), title: "Water the plants", priority: "low", status: "todo", focus_minutes: 5, created_at: new Date().toISOString(), completed_at: null },
-  ],
-  events: [
-    { id: uid(), title: "Deep work — investor deck", starts_at: todayAt(9), ends_at: todayAt(10, 30), priority: "critical" },
-    { id: uid(), title: "Standup", starts_at: todayAt(11), ends_at: todayAt(11, 30), priority: "medium" },
-    { id: uid(), title: "Gym — leg day", starts_at: todayAt(14), ends_at: todayAt(14, 45), priority: "medium" },
-    { id: uid(), title: "Inbox zero", starts_at: todayAt(16), ends_at: todayAt(16, 30), priority: "low" },
-  ],
-  points: 320,
-  streak: 7,
+  tasks: [],
+  events: [],
+  points: 0,
+  streak: 0,
   lifestyle: "",
 };
-
 let state: State = initial;
+
+if (typeof window !== "undefined") {
+  try {
+    const saved = localStorage.getItem("last-minute-store");
+
+    if (saved) {
+      state = JSON.parse(saved);
+    }
+  } catch {
+    state = initial;
+  }
+}
+
 const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((l) => l());
+const emit = () => {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(
+      "last-minute-store",
+      JSON.stringify(state)
+    );
+  }
+
+  listeners.forEach((l) => l());
+};
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
 
 export const store = {
@@ -77,9 +89,55 @@ export function useDemo<T>(selector: (s: State) => T): T {
 
 // Actions
 export const actions = {
-  addTask(title: string, priority: Priority, focus_minutes = 25) {
-    const t: Task = { id: uid(), title, priority, status: "todo", focus_minutes, created_at: new Date().toISOString(), completed_at: null };
-    store.set((s) => ({ tasks: [t, ...s.tasks] }));
+  
+   addTask(
+  title: string,
+  priority: Priority,
+  focus_minutes = 25,
+  startTime?: string,
+  endTime?: string
+) {
+  const t: Task = {
+    id: uid(),
+    title,
+    priority,
+    status: "todo",
+    focus_minutes,
+    created_at: new Date().toISOString(),
+    completed_at: null,
+    startTime,
+    endTime,
+  };
+
+  store.set((s) => ({
+    tasks: [...s.tasks, t],
+  }));
+  if (startTime && endTime) {
+  const today = new Date();
+
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+
+  const start = new Date(today);
+  start.setHours(sh, sm, 0, 0);
+
+  const end = new Date(today);
+  end.setHours(eh, em, 0, 0);
+
+  store.set((s) => ({
+    events: [
+      ...s.events,
+      {
+        id: uid(),
+        title,
+        starts_at: start.toISOString(),
+        ends_at: end.toISOString(),
+        priority,
+      },
+    ],
+  }));
+}
+
   },
   setStatus(id: string, status: Status) {
     store.set((s) => {
@@ -91,7 +149,14 @@ export const actions = {
         }
         return { ...t, status, completed_at: status === "done" ? new Date().toISOString() : null };
       });
-      return { tasks, points: s.points + pointsBump };
+      return {
+  tasks,
+  points: s.points + pointsBump,
+  streak:
+    pointsBump > 0
+      ? s.streak + 1
+      : s.streak,
+};
     });
   },
   setPriority(id: string, priority: Priority) {
