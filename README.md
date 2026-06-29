@@ -49,6 +49,7 @@ Using Google Gemini, the system analyzes user requirements and creates a persona
 
 * Google Gemini 2.5 Flash
 * Google AI Studio
+* Lovable
 
 ## Google Technologies Utilized
 
