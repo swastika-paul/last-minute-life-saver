@@ -1,5 +1,6 @@
 # Last Minute Life Saver
 
+## Project Name - FocusForge AI
 ## Problem Statement
 
 Students and professionals often struggle with procrastination, poor time management, and creating realistic schedules around their daily commitments. Existing task managers require manual planning and do not adapt to individual lifestyles.
