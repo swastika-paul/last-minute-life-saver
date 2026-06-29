@@ -88,5 +88,5 @@ The application is currently deployed on Render for demonstration purposes. Duri
 
 The application is fully functional and publicly accessible through the deployment link. The codebase is cloud-ready and can be deployed to Google Cloud Run with minimal configuration changes.
 
-Developed as part of a hackathon project focused on AI-powered productivity and time management.
+(Developed as part of a hackathon project focused on AI-powered productivity and time management.)
 
