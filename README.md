@@ -59,7 +59,7 @@ Using Google Gemini, the system analyzes user requirements and creates a persona
 ## Installation
 
 ```bash
-git clone <https://github.com/swastika-paul/last-minute-life-save>
+git clone https://github.com/swastika-paul/last-minute-life-save
 cd last-minute-life-saver
 npm install
 npm run dev
