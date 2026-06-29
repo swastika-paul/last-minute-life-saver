@@ -75,7 +75,7 @@ npm run build
 * Smart conflict detection
 * Calendar synchronization
 * Productivity analytics
-* AI schedule optimization
+* AI calling system
 * Mobile application support
 ## Live Demo
 
